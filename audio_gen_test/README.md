@@ -1,5 +1,5 @@
 # Audio Generation Test
-0.1.0
+0.1.0 [(Download Release)](https://github.com/FidelisAnalog/Audio-Utilities/releases/tag/audio_gen_test_v0.1.0)
 
 ## Overview
 Measures cumulative audio degradation through repeated DAC/ADC conversion cycles. Plays audio through your interface, records it back. 
