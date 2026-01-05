@@ -1,0 +1,9 @@
+# Audio I/O
+sounddevice>=0.4.6
+soundfile>=0.12.0
+
+# NumPy for array handling
+numpy>=1.24.0
+
+# Signal processing for alignment
+scipy>=1.10.0
