@@ -1,7 +1,8 @@
 # Audio Generation Test
+0.1.0
 
-Measures cumulative audio degradation through repeated DAC/ADC conversion cycles. Plays audio through your interface, records it back, and repeats—revealing subtle losses that accumulate over many generations.
-
+## Overview
+Measures cumulative audio degradation through repeated DAC/ADC conversion cycles. Plays audio through your interface, records it back. 
 ## Quick Start
 
 ```bash
@@ -32,7 +33,7 @@ Options:
   --output-device N   Skip device selection, use device N for output
   --input-device N    Skip device selection, use device N for input
   -l, --list          List audio devices and exit
-  -V, --version       Show version and exit
+  -v, --version       Show version and exit
 ```
 
 ## Output
@@ -88,7 +89,7 @@ Fields:
 
 ### Sample Alignment
 
-The recorded audio is delayed by I/O latency (typically 100-150ms). Cross-correlation precisely locates the start of the actual audio within the recording buffer.
+The recorded audio is delayed by I/O latency. Cross-correlation precisely locates the start of the actual audio within the recording buffer.
 
 Sub-sample drift is tracked across generations using parabolic interpolation on the correlation peak. This catches clock rate mismatches between playback and recording paths.
 
@@ -104,7 +105,7 @@ RMS and peak are measured on the aligned audio before any compensation:
 
 **Dynamic mode** (`-c dynamic`): Each generation is gain-adjusted to match the original RMS. This isolates spectral/distortion changes from cumulative level loss.
 
-**Calibrated mode** (`-c calibrated`): Measures I/O loss once using pink noise, applies fixed correction. Currently experimental.
+**Calibrated mode** (`-c calibrated`): Measures I/O loss once using pink noise, applies fixed correction. Currently experimental and doesn't really work.
 
 ### Bit Depth Handling
 
@@ -125,18 +126,7 @@ The tool preserves the source file's bit depth throughout the chain.
 ## Hardware Setup
 
 Connect your DAC output to ADC input with appropriate cables:
-- Balanced (XLR or TRS) preferred for lowest noise
 - Match levels to avoid clipping or excessive noise floor
 - Verify signal path with a quick test run
 
 For interfaces with loopback routing (digital), use physical cables to test actual DAC/ADC conversion.
-
-## Interpreting Results
-
-**RMS drift**: Cumulative level loss reveals converter gain accuracy.
-
-**Spectral changes**: Compare FFTs of gen_000 vs gen_100 to see frequency-dependent losses.
-
-**Distortion**: Examine difference signal (gen_100 minus gen_000 aligned) for added harmonics or noise.
-
-**Sub-sample drift**: Tracked via parabolic interpolation on correlation peak.
