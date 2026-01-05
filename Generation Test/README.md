@@ -32,6 +32,7 @@ Options:
   --output-device N   Skip device selection, use device N for output
   --input-device N    Skip device selection, use device N for input
   -l, --list          List audio devices and exit
+  -V, --version       Show version and exit
 ```
 
 ## Output

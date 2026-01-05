@@ -9,6 +9,8 @@ Usage:
     python gen_test.py source.wav --generations 100 --milestone 10 --output results/
 """
 
+__version__ = "0.1.0"
+
 import argparse
 import sys
 import os
@@ -534,6 +536,7 @@ Examples:
                         help="Level compensation mode: 'dynamic' (per-iteration RMS) or 'calibrated' (fixed I/O gain)")
     parser.add_argument('--shared', action='store_true',
                         help="Use WASAPI shared mode instead of exclusive (Windows only, for virtual devices)")
+    parser.add_argument('-V', '--version', action='version', version=f'%(prog)s {__version__}')
     
     args = parser.parse_args()
     
