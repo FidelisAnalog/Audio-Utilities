@@ -12,7 +12,7 @@ def get_backend() -> AudioBackend:
         from .coreaudio import CoreAudioBackend
         return CoreAudioBackend()
     elif sys.platform == 'win32':
-        from .wasapi import WindowsAudioBackend
+        from .windows import WindowsAudioBackend
         return WindowsAudioBackend()
     else:
         raise NotImplementedError(f"No backend available for {sys.platform}")
