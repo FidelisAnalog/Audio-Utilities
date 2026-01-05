@@ -50,10 +50,12 @@ Console output (one line per generation):
 ```
 # No compensation - shows delta, no gain
   1/100  rms:-24.74dB(-0.10)  pk:-6.63  off:12541 sub:+0.23
+ ...
  10/100  rms:-25.74dB(-1.00)  pk:-6.63  off:12541 sub:-0.25  gen_010.wav
 
 # Dynamic compensation - shows gain, no delta
   1/100  rms:-24.74dB  pk:-6.63  gain:+0.10  off:12541 sub:+0.23
+ ...
  10/100  rms:-24.74dB  pk:-6.63  gain:+0.10  off:12541 sub:-0.25  gen_010.wav
 ```
 
