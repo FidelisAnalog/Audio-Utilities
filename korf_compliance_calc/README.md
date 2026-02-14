@@ -24,6 +24,10 @@ where r = f/f₀ and Q is the quality factor (default 1.0, user-adjustable).
 
 Headshell excursion is the input displacement (0.1 mm) multiplied by H(f). Acceleration is derived from excursion via ω²×displacement, converted to g.
 
+## Example output
+
+![Sample plot — 25g effective mass, 13 µm/mN compliance](examples/KorfCompCalc_25g_13um.png)
+
 ## Usage
 
 Basic usage — shows an interactive plot:
