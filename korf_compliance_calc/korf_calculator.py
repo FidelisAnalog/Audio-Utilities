@@ -525,9 +525,14 @@ def main():
                        Q=args.Q)
 
     if args.csv:
-        print("frequency_hz,excursion_mm,acceleration_g")
-        for f, e, a in zip(result['freqs'], result['excursion'], result['acceleration']):
-            print(f"{f:.4f},{e:.8f},{a:.8f}")
+        compliance = result.get('compliance', None)
+        c_str = f"{compliance:g}" if compliance is not None else "0"
+        csv_path = f"KorfCompCalc_{result['total_mass']:.0f}g_{c_str}um.csv"
+        with open(csv_path, 'w') as fh:
+            fh.write("frequency_hz,excursion_mm,acceleration_g\n")
+            for f, e, a in zip(result['freqs'], result['excursion'], result['acceleration']):
+                fh.write(f"{f:.4f},{e:.8f},{a:.8f}\n")
+        print(f"  CSV saved: {csv_path}")
     else:
         print_results(result, show_curve=args.ascii)
 
