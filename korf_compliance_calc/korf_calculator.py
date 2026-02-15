@@ -45,6 +45,8 @@ import argparse
 import sys
 import os
 
+VERSION = '0.1.1'
+
 # ============================================================
 # CORE CALCULATOR
 # ============================================================
@@ -345,19 +347,36 @@ def plot_results(result, output_path=None, show=True, save=False):
     compliance = result.get('compliance', None)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 12), facecolor=BG_COLOR)
-    line1 = f'Korf Calculator — {total_mass:.1f}g'
+    mass_str = f'{total_mass:g}' if total_mass == int(total_mass) else f'{total_mass:.1f}'
+    line1 = f'Korf Calculator — {mass_str}g'
     if compliance is not None:
-        line1 += f', {compliance:.0f} µm/mN'
+        c_str = f'{compliance:g}' if compliance == int(compliance) else f'{compliance:.1f}'
+        line1 += f', {c_str} µm/mN'
     line2 = f'f₀ = {f0:.2f} Hz, Q = {Q:g}'
     fig.suptitle(line1, fontsize=14, fontweight='bold', y=0.99)
     fig.text(0.5, 0.955, line2, ha='center', fontsize=10, color='#555')
 
-    # ── Fixed axis scales matching korfaudio.com/calculator ──
+    # ── Default axis scales matching korfaudio.com/calculator ──
+    # Autoscale when data exceeds defaults
+    def _autoscale(data_max, default_max, default_step):
+        """Return (ylim, yticks). Use defaults if data fits; expand otherwise."""
+        if data_max <= default_max:
+            return default_max, np.arange(0, default_max + default_step * 0.5, default_step)
+        target_steps = 6
+        raw_step = data_max * 1.1 / target_steps
+        decade = 10 ** np.floor(np.log10(raw_step))
+        norm = raw_step / decade
+        if norm <= 1.0:   nice = 1.0
+        elif norm <= 2.0: nice = 2.0
+        elif norm <= 5.0: nice = 5.0
+        else:             nice = 10.0
+        step = nice * decade
+        ylim = np.ceil(data_max * 1.1 / step) * step
+        return ylim, np.arange(0, ylim + step * 0.5, step)
+
+    EXC_YMAX, EXC_YTICKS = _autoscale(np.max(exc), 0.30, 0.05)
+    ACC_YMAX, ACC_YTICKS = _autoscale(np.max(acc), 0.150, 0.025)
     XMAX = 30.0             # Hz
-    EXC_YMAX = 0.30         # mm
-    ACC_YMAX = 0.150        # g
-    EXC_YTICKS = np.arange(0, EXC_YMAX + 0.01, 0.05)   # 0.00, 0.05, ... 0.30
-    ACC_YTICKS = np.arange(0, ACC_YMAX + 0.001, 0.025)  # 0.000, 0.025, ... 0.150
     XTICKS = np.arange(0, XMAX + 1, 10)                 # 0, 10, 20, 30
     XTICKS_MINOR = np.arange(5, XMAX, 10)               # 5, 15, 25
 
@@ -446,12 +465,22 @@ def plot_results(result, output_path=None, show=True, save=False):
 def print_results(result, show_curve=False):
     """Print calculator results in a formatted table."""
     print(f"\n{'='*60}")
-    print(f"  Korf Compliance Calculator Results")
+    print(f"  Korf Compliance Calculator v{VERSION}")
     print(f"{'='*60}")
-    print(f"  Total effective mass:  {result['total_mass']:.1f} g")
-    print(f"  Carlson frequency f₀: {result['f0']:.2f} Hz")
-    print(f"  Q factor:             {result['Q']:g}")
-    print(f"  Input excitation:     {INPUT_DISP} mm")
+    mass = result['total_mass']
+    mass_str = f'{mass:g}' if mass == int(mass) else f'{mass:.1f}'
+    compliance = result.get('compliance', None)
+    col = 26  # value start column (after 2-char indent)
+    def _row(label, value):
+        pad = col - 2 - len(label)
+        return f"  {label}{' ' * max(pad, 1)}{value}"
+    print(_row('Total effective mass:', f'{mass_str} g'))
+    if compliance is not None:
+        c_str = f'{compliance:g}' if compliance == int(compliance) else f'{compliance:.1f}'
+        print(_row('Compliance:', f'{c_str} µm/mN'))
+    print(_row('Carlson frequency f₀:', f'{result["f0"]:.2f} Hz'))
+    print(_row('Q factor:', f'{result["Q"]:g}'))
+    print(_row('Input excitation:', f'{INPUT_DISP} mm'))
     print(f"{'─'*60}")
     print(f"  Excursion peak:       {result['exc_peak_mm']:.4f} mm "
           f"@ {result['exc_peak_hz']:.2f} Hz")
@@ -498,6 +527,8 @@ def print_results(result, show_curve=False):
 def main():
     parser = argparse.ArgumentParser(
         description='Korf Audio Compliance/Effective Mass Calculator (Python)')
+    parser.add_argument('-v', '--version', action='version',
+                        version=f'%(prog)s {VERSION}')
     parser.add_argument('mass', type=float,
                         help='Tonearm effective mass (grams, 1-100)')
     parser.add_argument('compliance', type=float,

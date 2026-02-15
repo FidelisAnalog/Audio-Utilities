@@ -1,4 +1,4 @@
-# Korf Audio Compliance/Effective Mass Calculator
+# Korf Audio Compliance/Effective Mass Calculator — v0.1.1
 
 Python implementation of the cartridge compliance calculator from [korfaudio.com/calculator](https://korfaudio.com/calculator), reverse-engineered by JP / sjplot.com with Claude analysis (Feb 2026).
 
@@ -50,7 +50,7 @@ Text output only (no plot window):
 
     python3 korf_calculator.py 35 15 --no-plot
 
-CSV output:
+Save CSV data to file:
 
     python3 korf_calculator.py 35 15 --csv
 
@@ -65,8 +65,9 @@ CSV output:
 | `-s` | Headshell/hardware weight in grams |
 | `--save [path]` | Save plot as PNG |
 | `--no-plot` | Suppress interactive plot window |
-| `--csv` | Output frequency/excursion/acceleration as CSV |
+| `--csv` | Save frequency/excursion/acceleration to CSV file |
 | `--ascii` | Show ASCII acceleration plot in terminal |
+| `-v`, `--version` | Show version and exit |
 
 ### Saved filenames
 
@@ -86,6 +87,10 @@ print(f"Peak acceleration: {result['acc_peak_g']:.4f} g @ {result['acc_peak_hz']
 
 plot_results(result, save=True)
 ```
+
+## Plot scaling
+
+Plot axes default to the Korf site's fixed scales (excursion 0–0.30 mm, acceleration 0–0.150 g). When data exceeds the defaults — as it will with realistic Q values above ~2.5 — axes autoscale with clean tick intervals.
 
 ## Green zone
 
