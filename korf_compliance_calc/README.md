@@ -112,7 +112,7 @@ The dashed trace connects the peaks across Q values, showing how both frequency 
 
 ![Q sensitivity — peak convergence vs Q factor](examples/Q_sensitivity.png)
 
-A standalone script `plot_q_sensitivity.py` generates this plot for any mass/compliance combination:
+The script `plot_q_sensitivity.py` generates this plot for any mass/compliance combination (requires `korf_calculator.py` in the same directory):
 
     python3 plot_q_sensitivity.py              # defaults: 17g, 26 µm/mN
     python3 plot_q_sensitivity.py 25 15        # custom mass & compliance
