@@ -67,8 +67,15 @@ def plot_q_sensitivity(mass, compliance, output_path=None):
         acc_dots_f.append(freqs[ai])
         acc_dots_v.append(acc[ai])
 
-        ax1.plot(freqs, exc, color=color, linewidth=1.8, label=f'Q = {Q:g}')
-        ax2.plot(freqs, acc, color=color, linewidth=1.8, label=f'Q = {Q:g}')
+        ax1.plot(freqs, exc, color=color, linewidth=1.8,
+                label=f'Q = {Q:g}: {freqs[ei]:.1f} Hz')
+        ax2.plot(freqs, acc, color=color, linewidth=1.8,
+                label=f'Q = {Q:g}: {freqs[ai]:.1f} Hz')
+
+    # Carlson f₀ line
+    for ax in (ax1, ax2):
+        ax.axvline(x=f0, color='gray', linestyle=':', linewidth=1, alpha=0.7,
+                   label=f'Carlson f₀ = {f0:.2f} Hz')
 
     # Smooth peak trace
     ax1.plot(exc_pf, exc_pv, 'r--', linewidth=1.5, alpha=0.7, zorder=10)
