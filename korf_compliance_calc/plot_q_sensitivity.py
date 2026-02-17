@@ -71,11 +71,11 @@ def plot_q_sensitivity(mass, compliance, output_path=None):
         ax2.plot(freqs, acc, color=color, linewidth=1.8, label=f'Q = {Q:g}')
 
     # Smooth peak trace
-    ax1.plot(exc_pf, exc_pv, 'k--', linewidth=1.5, alpha=0.7, zorder=10)
-    ax1.scatter(exc_dots_f, exc_dots_v, color='black', s=25, zorder=11)
+    ax1.plot(exc_pf, exc_pv, 'r--', linewidth=1.5, alpha=0.7, zorder=10)
+    ax1.scatter(exc_dots_f, exc_dots_v, color='red', s=16, zorder=11)
 
-    ax2.plot(acc_pf, acc_pv, 'k--', linewidth=1.5, alpha=0.7, zorder=10)
-    ax2.scatter(acc_dots_f, acc_dots_v, color='black', s=25, zorder=11)
+    ax2.plot(acc_pf, acc_pv, 'r--', linewidth=1.5, alpha=0.7, zorder=10)
+    ax2.scatter(acc_dots_f, acc_dots_v, color='red', s=16, zorder=11)
 
     ax1.set_ylabel('Excursion (mm)')
     ax1.set_title(f'Q Sensitivity — {mass:g}g, {compliance:g} µm/mN, f₀ = {f0:.2f} Hz',
