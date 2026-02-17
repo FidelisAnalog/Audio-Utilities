@@ -104,6 +104,19 @@ The Valencia-Campo formula used here is the force-excited oscillator transfer fu
 
 This affects the curve shape at high frequencies. The Korf calculator uses the simpler force-excitation form.
 
+## Q factor sensitivity
+
+The Q factor has a dramatic effect on both peak amplitude and peak frequency. At Korf's fixed Q = 1, the excursion and acceleration peaks are widely separated from the Carlson frequency f₀ and barely exceed the input amplitude. As Q increases toward realistic values (3–5 per AES literature), both peaks converge on f₀ and scale nearly linearly with Q. Above Q ≈ 3, the Korf calculator adds almost nothing over Carlson's undamped prediction.
+
+The dashed trace connects the peaks across Q values, showing how both frequency and amplitude converge as Q increases.
+
+![Q sensitivity — peak convergence vs Q factor](examples/Q_sensitivity.png)
+
+A standalone script `plot_q_sensitivity.py` generates this plot for any mass/compliance combination:
+
+    python3 plot_q_sensitivity.py              # defaults: 17g, 26 µm/mN
+    python3 plot_q_sensitivity.py 25 15        # custom mass & compliance
+
 ## Requirements
 
 - Python 3.8+
