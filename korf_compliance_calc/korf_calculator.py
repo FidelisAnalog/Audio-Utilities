@@ -445,7 +445,8 @@ def plot_results(result, output_path=None, show=True, save=False):
     if save:
         if output_path is None:
             c_str = f"{compliance:g}" if compliance is not None else "0"
-            output_path = f"KorfCompCalc_{total_mass:.0f}g_{c_str}um.png"
+            q_str = f"_Q{Q:g}" if Q != Q_FIXED else ""
+            output_path = f"KorfCompCalc_{total_mass:.0f}g_{c_str}um{q_str}.png"
         fig.savefig(output_path, dpi=150,
                     facecolor=BG_COLOR, edgecolor='none')
         print(f"  Plot saved: {output_path}")
@@ -558,7 +559,8 @@ def main():
     if args.csv:
         compliance = result.get('compliance', None)
         c_str = f"{compliance:g}" if compliance is not None else "0"
-        csv_path = f"KorfCompCalc_{result['total_mass']:.0f}g_{c_str}um.csv"
+        q_str = f"_Q{result['Q']:g}" if result['Q'] != Q_FIXED else ""
+        csv_path = f"KorfCompCalc_{result['total_mass']:.0f}g_{c_str}um{q_str}.csv"
         with open(csv_path, 'w') as fh:
             fh.write("frequency_hz,excursion_mm,acceleration_g\n")
             for f, e, a in zip(result['freqs'], result['excursion'], result['acceleration']):

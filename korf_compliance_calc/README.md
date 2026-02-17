@@ -28,6 +28,10 @@ Headshell excursion is the input displacement (0.1 mm) multiplied by H(f). Accel
 
 ![Sample plot — 25g effective mass, 13 µm/mN compliance](examples/KorfCompCalc_25g_13um.png)
 
+This implementation allows Q to be specified as an input parameter so that more realistic values can be used. With Q = 3.5 (typical for an undamped cartridge per AES literature), the resonance peak is significantly sharper and higher than Korf's default Q = 1 output:
+
+![17g effective mass, 26 µm/mN compliance, Q = 3.5](examples/KorfCompCalc_17g_26um_Q3.5.png)
+
 ## Usage
 
 Basic usage — shows an interactive plot:
@@ -71,7 +75,7 @@ Save CSV data to file:
 
 ### Saved filenames
 
-Auto-generated filenames follow the pattern `KorfCompCalc_<mass>g_<compliance>um.png`, for example `KorfCompCalc_35g_15um.png` or `KorfCompCalc_20g_12.5um.png`.
+Auto-generated filenames follow the pattern `KorfCompCalc_<mass>g_<compliance>um.png` at default Q, or `KorfCompCalc_<mass>g_<compliance>um_Q<value>.png` when Q is specified. For example: `KorfCompCalc_35g_15um.png`, `KorfCompCalc_17g_26um_Q3.5.png`.
 
 ## API usage
 
