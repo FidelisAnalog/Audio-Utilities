@@ -28,7 +28,7 @@ Headshell excursion is the input displacement (0.1 mm) multiplied by H(f). Accel
 
 ![Sample plot — 25g effective mass, 13 µm/mN compliance](examples/KorfCompCalc_25g_13um.png)
 
-This implementation allows Q to be specified as an input parameter so that more realistic values can be used. With Q = 3.5 (typical for an undamped cartridge per AES literature), the resonance peak is significantly sharper and higher than Korf's default Q = 1 output:
+This implementation allows Q to be specified as an input parameter so that more realistic values can be used. With Q = 3.5 (typical for an undamped cartridge per AES literature), the resonance peak is significantly sharper and higher than Korf's default Q = 1 output, and much closer to the Carlson f₀:
 
 ![17g effective mass, 26 µm/mN compliance, Q = 3.5](examples/KorfCompCalc_17g_26um_Q3.5.png)
 
