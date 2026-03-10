@@ -22,72 +22,116 @@ import numpy as np
 from backends import get_backend, StreamConfig
 
 
-def find_alignment_offset(reference: np.ndarray, recorded: np.ndarray, sample_rate: int, cumulative_subsample: float = 0.0) -> tuple[int, float]:
+def _to_mono_f64(audio: np.ndarray) -> np.ndarray:
+    """Convert audio to mono float64 for alignment calculations."""
+    d = audio.astype(np.float64)
+    if d.ndim > 1:
+        return (d[:, 0] + d[:, 1]) / 2.0 if d.shape[1] >= 2 else d[:, 0]
+    return d
+
+
+def fft_xcorr_offset(ref_mono: np.ndarray, test_mono: np.ndarray, max_offset: int = 12000) -> int:
     """
-    Find exact sample offset between reference and recorded using cross-correlation
-    with sub-sample interpolation.
-    
+    FFT cross-correlation for rough sample offset.
+
     Args:
-        reference: Original audio played
-        recorded: Audio recorded (should be longer due to padding)
-        sample_rate: For determining search window
-        cumulative_subsample: Running total of sub-sample offsets from previous generations
-        
+        ref_mono: Reference signal (mono float64)
+        test_mono: Test/recorded signal (mono float64)
+        max_offset: Maximum expected offset in samples
+
     Returns:
-        Tuple of (integer_offset, new_cumulative_subsample)
+        Rough integer offset (positive = test is delayed relative to ref)
     """
-    from scipy import signal
-    
-    # Use first channel
-    ref_mono = reference[:, 0] if reference.ndim > 1 else reference
-    rec_mono = recorded[:, 0] if recorded.ndim > 1 else recorded
-    
-    # Convert to float for correlation
-    ref_float = ref_mono.astype(np.float64)
-    rec_float = rec_mono.astype(np.float64)
-    
-    # Use full correlation
-    correlation = signal.correlate(rec_float, ref_float, mode='full')
-    
-    # The peak position relative to where zero-lag would be
-    # In 'full' mode, zero-lag is at index len(ref) - 1
-    peak_idx = np.argmax(correlation)
-    integer_offset = peak_idx - (len(ref_float) - 1)
-    
-    # Parabolic interpolation for sub-sample refinement
-    # Standard formula: δ = (y_plus - y_minus) / (2 * (2*y_peak - y_minus - y_plus))
-    if peak_idx > 0 and peak_idx < len(correlation) - 1:
-        y_minus = correlation[peak_idx - 1]
-        y_peak = correlation[peak_idx]
-        y_plus = correlation[peak_idx + 1]
-        
-        denom = y_minus - 2*y_peak + y_plus
-        if abs(denom) > 1e-10:
-            # Positive subsample = true peak is to the right of integer peak
-            # Negative subsample = true peak is to the left
-            subsample = 0.5 * (y_plus - y_minus) / (-denom)
-        else:
-            subsample = 0.0
-    else:
-        subsample = 0.0
-    
-    # Add this generation's sub-sample offset to cumulative total
-    new_cumulative = cumulative_subsample + subsample
-    
-    # When cumulative exceeds ±0.5, adjust integer offset
-    # Note: empirically the subsample detection has inverted sign,
-    # so we invert the adjustment direction
-    adjustment = 0
-    if new_cumulative <= -0.5:
-        adjustment = +1  # Trim more (audio arriving later than detected)
-        new_cumulative += 1.0
-    elif new_cumulative >= 0.5:
-        adjustment = -1  # Trim less
-        new_cumulative -= 1.0
-    
-    final_offset = max(0, integer_offset + adjustment)
-    
-    return final_offset, new_cumulative
+    margin = 44100
+    usable = min(len(ref_mono), len(test_mono)) - margin * 2 - max_offset
+    if usable < 44100:
+        margin = min(len(ref_mono), len(test_mono)) // 8
+        usable = min(len(ref_mono), len(test_mono)) - margin * 2 - max_offset
+
+    seg_len = max(usable, 44100)
+    start = margin
+
+    ref_seg = ref_mono[start:start + seg_len].copy()
+    t_start = max(0, start - max_offset)
+    t_end = min(len(test_mono), start + seg_len + max_offset)
+    test_seg = test_mono[t_start:t_end].copy()
+
+    ref_seg -= np.mean(ref_seg)
+    test_seg -= np.mean(test_seg)
+
+    n = len(ref_seg) + len(test_seg) - 1
+    fft_size = 1
+    while fft_size < n:
+        fft_size *= 2
+
+    REF = np.fft.rfft(ref_seg, fft_size)
+    TEST = np.fft.rfft(test_seg, fft_size)
+    xcorr = np.fft.irfft(REF.conj() * TEST, fft_size)
+
+    peak_idx = np.argmax(xcorr[:len(test_seg)])
+    offset = peak_idx - (start - t_start)
+    return offset
+
+
+def mse_at_offset(a_mono: np.ndarray, b_mono: np.ndarray, offset: int, margin: int = 44100) -> float:
+    """
+    Compute MSE between two signals at a given offset.
+
+    offset > 0 means b is delayed: a[i] matches b[i + offset].
+    Excludes margin samples from head and tail to avoid edge artifacts.
+    """
+    a_start = margin
+    b_start = margin + offset
+
+    if b_start < 0:
+        a_start += -b_start
+        b_start = 0
+
+    available = min(len(a_mono) - a_start, len(b_mono) - b_start) - margin
+    if available <= 0:
+        return np.inf
+
+    a_seg = a_mono[a_start:a_start + available]
+    b_seg = b_mono[b_start:b_start + available]
+    return float(np.mean((a_seg - b_seg) ** 2))
+
+
+def find_alignment_offset(reference: np.ndarray, recorded: np.ndarray, sample_rate: int, search_radius: int = 3) -> tuple[int, float]:
+    """
+    Find exact sample offset between reference and recorded audio.
+
+    Two-stage approach:
+    1. FFT cross-correlation for rough offset
+    2. MSE refinement over ±search_radius samples around rough offset
+
+    Args:
+        reference: Reference audio (what was played or original source)
+        recorded: Audio recorded (should be longer due to padding)
+        sample_rate: Sample rate (used for margin calculations)
+        search_radius: Samples to search around rough offset for MSE refinement
+
+    Returns:
+        Tuple of (best_offset, best_mse)
+    """
+    ref_mono = _to_mono_f64(reference)
+    rec_mono = _to_mono_f64(recorded)
+
+    # Stage 1: FFT cross-correlation for rough offset
+    rough_offset = fft_xcorr_offset(ref_mono, rec_mono)
+
+    # Stage 2: MSE refinement around rough offset
+    best_offset = rough_offset
+    best_mse = np.inf
+    for delta in range(-search_radius, search_radius + 1):
+        candidate = rough_offset + delta
+        if candidate < 0:
+            continue
+        mse = mse_at_offset(ref_mono, rec_mono, candidate)
+        if mse < best_mse:
+            best_mse = mse
+            best_offset = candidate
+
+    return max(0, best_offset), best_mse
 
 
 def extract_aligned_audio(recorded: np.ndarray, offset: int, target_len: int) -> np.ndarray:
@@ -198,7 +242,7 @@ def calibrate_io_gain(backend, config, sample_rate: int, channels: int, dtype) -
     recorded = backend.playrec(padded_signal, config)
     
     # Use cross-correlation to find alignment (like generation loop)
-    offset, _ = find_alignment_offset(test_signal, recorded, sample_rate, 0.0)
+    offset, _ = find_alignment_offset(test_signal, recorded, sample_rate)
     aligned = extract_aligned_audio(recorded, offset, num_samples)
     
     # Measure RMS of both
@@ -258,11 +302,12 @@ def run_generation_test(
     output_device_idx: int = None,
     input_device_idx: int = None,
     compensate: str = None,
+    align_ref: str = 'original',
     shared_mode: bool = False,
 ):
     """
     Run the generation test.
-    
+
     Args:
         source_file: Path to source WAV file
         output_dir: Directory for output files
@@ -271,6 +316,7 @@ def run_generation_test(
         output_device_idx: Pre-selected output device index
         input_device_idx: Pre-selected input device index
         compensate: Compensation mode - None, 'dynamic' (per-iteration RMS), or 'calibrated' (fixed I/O gain)
+        align_ref: Alignment reference - 'original' (gen 0) or 'previous' (prior generation)
         shared_mode: Use WASAPI shared mode instead of exclusive (Windows only, for virtual devices)
     """
     # Create output directory
@@ -321,6 +367,7 @@ def run_generation_test(
     ref_peak_db = 20 * np.log10(ref_peak) if ref_peak > 0 else -np.inf
     print(f"  Reference RMS: {ref_rms_db:.4f} dBFS")
     print(f"  Reference Peak: {ref_peak_db:.4f} dBFS")
+    print(f"  Alignment reference: {align_ref}")
     if compensate:
         print(f"  Level compensation: {compensate.upper()}")
     
@@ -356,6 +403,7 @@ def run_generation_test(
         f.write(f"Duration: {duration:.2f}s\n")
         f.write(f"Generations: {generations}\n")
         f.write(f"Milestone interval: {milestone_interval}\n")
+        f.write(f"Alignment reference: {align_ref}\n")
         f.write(f"Level compensation: {compensate}\n")
         f.write(f"Reference RMS: {ref_rms_db:.4f} dBFS\n")
         f.write(f"Reference Peak: {ref_peak_db:.4f} dBFS\n")
@@ -400,29 +448,31 @@ def run_generation_test(
             f.write("-" * 50 + "\n")
         
         target_len = len(data)
-        cumulative_subsample = 0.0
-        
+        original_data = data.copy()  # Preserved gen 0 for alignment reference
+
         for gen in range(1, generations + 1):
             # Pad current data with silence at end
             padded_data = np.vstack([current_data, padding])
-            
+
             # Play padded audio and record
             recorded = backend.playrec(padded_data, config)
-            
-            # Find exact alignment using cross-correlation with sub-sample tracking
-            offset, cumulative_subsample = find_alignment_offset(
-                current_data, recorded, int(sample_rate), cumulative_subsample
+
+            # Find alignment offset using FFT xcorr + MSE refinement
+            # Reference is either the original source or the previous generation
+            align_reference = original_data if align_ref == 'original' else current_data
+            offset, align_mse = find_alignment_offset(
+                align_reference, recorded, int(sample_rate)
             )
-            
+
             # Extract aligned audio
             aligned = extract_aligned_audio(recorded, offset, target_len)
-            
+
             # Measure levels
             gen_rms, gen_peak = measure_levels(aligned)
             gen_rms_db = 20 * np.log10(gen_rms) if gen_rms > 0 else -np.inf
             gen_peak_db = 20 * np.log10(gen_peak) if gen_peak > 0 else -np.inf
             rms_delta = gen_rms_db - ref_rms_db
-            
+
             # Apply compensation if enabled
             gain_db = 0.0
             if compensate == 'dynamic' and gen_rms > 0:
@@ -434,45 +484,42 @@ def run_generation_test(
                 # Calibrated: apply fixed I/O gain correction
                 aligned = apply_gain(aligned, io_gain)
                 gain_db = 20*np.log10(io_gain)
-            
+
             # Check if this is a milestone
             is_milestone = milestone_interval > 0 and gen % milestone_interval == 0
             is_final = gen == generations
-            
+
             # Build console output (compact, <=80 chars)
             if compensate == 'dynamic':
-                # In dynamic mode, delta is redundant with gain
                 rms_str = f"rms:{gen_rms_db:.2f}dB"
                 gain_str = f"  gain:{gain_db:+.2f}"
             elif compensate == 'calibrated':
-                # Calibrated mode shows both
                 rms_str = f"rms:{gen_rms_db:.2f}dB({rms_delta:+.2f})"
                 gain_str = f"  gain:{gain_db:+.2f}"
             else:
-                # No compensation: show delta, no gain
                 rms_str = f"rms:{gen_rms_db:.2f}dB({rms_delta:+.2f})"
                 gain_str = ""
-            
-            console_line = f"{gen:3d}/{generations}  {rms_str}  pk:{gen_peak_db:.2f}{gain_str}  off:{offset} sub:{cumulative_subsample:+.2f}"
-            
+
+            console_line = f"{gen:3d}/{generations}  {rms_str}  pk:{gen_peak_db:.2f}{gain_str}  off:{offset} mse:{align_mse:.1f}"
+
             if is_milestone or is_final:
                 filename = f"gen_{gen:03d}.wav"
                 filepath = run_dir / filename
                 sf.write(filepath, aligned, sample_rate, subtype=info.subtype)
                 console_line += f"  {filename}"
-            
+
             print(console_line)
-            
+
             # Log to metadata file (full precision)
             if compensate:
-                meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  gain:{gain_db:+.4f}  off:{offset} sub:{cumulative_subsample:+.4f}"
+                meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  gain:{gain_db:+.4f}  off:{offset} mse:{align_mse:.4f}"
             else:
-                meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  off:{offset} sub:{cumulative_subsample:+.4f}"
+                meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  off:{offset} mse:{align_mse:.4f}"
             if is_milestone or is_final:
                 meta_line += f"  {filename}"
             with open(meta_file, 'a') as f:
                 f.write(meta_line + "\n")
-            
+
             # Use aligned data as input for next generation
             current_data = aligned
         
@@ -508,12 +555,15 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Run 100 generations, save every 10 (no compensation)
+    # Run 100 generations, save every 10 (aligns to original by default)
     python gen_test.py sweep.wav -g 100 -m 10 -o results/
+
+    # Align each generation to the previous generation instead of original
+    python gen_test.py sweep.wav -g 100 -m 10 -a previous -o results/
 
     # Run with dynamic level compensation (per-iteration RMS matching)
     python gen_test.py sweep.wav -g 100 -m 10 -c dynamic -o results/
-    
+
     # Run with calibrated level compensation (fixed I/O gain correction)
     python gen_test.py sweep.wav -g 100 -m 10 -c calibrated -o results/
         """
@@ -534,6 +584,8 @@ Examples:
                         help="List devices and exit")
     parser.add_argument('-c', '--compensate', choices=['dynamic', 'calibrated'], default=None,
                         help="Level compensation mode: 'dynamic' (per-iteration RMS) or 'calibrated' (fixed I/O gain)")
+    parser.add_argument('-a', '--align-ref', choices=['original', 'previous'], default='original',
+                        help="Alignment reference: 'original' (gen 0, default) or 'previous' (prior generation)")
     parser.add_argument('--shared', action='store_true',
                         help="Use WASAPI shared mode instead of exclusive (Windows only, for virtual devices)")
     parser.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
@@ -556,6 +608,7 @@ Examples:
         output_device_idx=args.output_device,
         input_device_idx=args.input_device,
         compensate=args.compensate,
+        align_ref=args.align_ref,
         shared_mode=args.shared,
     )
     
