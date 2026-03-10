@@ -9,7 +9,7 @@ Usage:
     python gen_test.py source.wav --generations 100 --milestone 10 --output results/
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 import argparse
 import sys
@@ -304,6 +304,9 @@ def run_generation_test(
     compensate: str = None,
     align_ref: str = 'original',
     shared_mode: bool = False,
+    output_channels: list = None,
+    input_channels: list = None,
+    per_channel: bool = False,
 ):
     """
     Run the generation test.
@@ -318,6 +321,9 @@ def run_generation_test(
         compensate: Compensation mode - None, 'dynamic' (per-iteration RMS), or 'calibrated' (fixed I/O gain)
         align_ref: Alignment reference - 'original' (gen 0) or 'previous' (prior generation)
         shared_mode: Use WASAPI shared mode instead of exclusive (Windows only, for virtual devices)
+        output_channels: Output channel mapping e.g. [11, 12] (default: [1, 2, ...])
+        input_channels: Input channel mapping e.g. [11, 12] (default: [1, 2, ...])
+        per_channel: Apply level compensation per channel independently
     """
     # Create output directory
     output_path = Path(output_dir)
@@ -367,9 +373,20 @@ def run_generation_test(
     ref_peak_db = 20 * np.log10(ref_peak) if ref_peak > 0 else -np.inf
     print(f"  Reference RMS: {ref_rms_db:.4f} dBFS")
     print(f"  Reference Peak: {ref_peak_db:.4f} dBFS")
+
+    # Per-channel reference RMS for per_channel mode
+    ref_rms_per_ch = None
+    if per_channel and channels > 1:
+        ref_rms_per_ch = []
+        for ch in range(channels):
+            ch_rms, _ = measure_levels(data[:, ch:ch+1])
+            ref_rms_per_ch.append(ch_rms)
+            ch_rms_db = 20 * np.log10(ch_rms) if ch_rms > 0 else -np.inf
+            print(f"  Reference RMS ch{ch+1}: {ch_rms_db:.4f} dBFS")
+
     print(f"  Alignment reference: {align_ref}")
     if compensate:
-        print(f"  Level compensation: {compensate.upper()}")
+        print(f"  Level compensation: {compensate.upper()}{' (per-channel)' if per_channel else ''}")
     
     # List and select devices
     outputs, inputs = list_devices()
@@ -419,6 +436,8 @@ def run_generation_test(
     # Run generations
     backend = get_backend()
     backend.shared_mode = shared_mode  # For WASAPI: use shared mode instead of exclusive
+    backend.output_channels = output_channels if output_channels else list(range(1, channels + 1))
+    backend.input_channels = input_channels if input_channels else list(range(1, channels + 1))
     current_data = data.copy()
     
     try:
@@ -475,11 +494,25 @@ def run_generation_test(
 
             # Apply compensation if enabled
             gain_db = 0.0
+            gains_per_ch = None
             if compensate == 'dynamic' and gen_rms > 0:
-                # Dynamic: adjust to match original RMS each iteration
-                gain = ref_rms / gen_rms
-                aligned = apply_gain(aligned, gain)
-                gain_db = 20*np.log10(gain)
+                if per_channel and ref_rms_per_ch and channels > 1:
+                    # Per-channel dynamic: adjust each channel independently
+                    gains_per_ch = []
+                    for ch in range(channels):
+                        ch_rms, _ = measure_levels(aligned[:, ch:ch+1])
+                        if ch_rms > 0:
+                            ch_gain = ref_rms_per_ch[ch] / ch_rms
+                            aligned[:, ch] = apply_gain(aligned[:, ch:ch+1], ch_gain).flatten()
+                            gains_per_ch.append(20*np.log10(ch_gain))
+                        else:
+                            gains_per_ch.append(0.0)
+                    gain_db = sum(gains_per_ch) / len(gains_per_ch)  # Average for display
+                else:
+                    # Standard dynamic: adjust to match original RMS each iteration
+                    gain = ref_rms / gen_rms
+                    aligned = apply_gain(aligned, gain)
+                    gain_db = 20*np.log10(gain)
             elif compensate == 'calibrated':
                 # Calibrated: apply fixed I/O gain correction
                 aligned = apply_gain(aligned, io_gain)
@@ -492,7 +525,10 @@ def run_generation_test(
             # Build console output (compact, <=80 chars)
             if compensate == 'dynamic':
                 rms_str = f"rms:{gen_rms_db:.2f}dB"
-                gain_str = f"  gain:{gain_db:+.2f}"
+                if gains_per_ch:
+                    gain_str = f"  gain:{'/'.join(f'{g:+.2f}' for g in gains_per_ch)}"
+                else:
+                    gain_str = f"  gain:{gain_db:+.2f}"
             elif compensate == 'calibrated':
                 rms_str = f"rms:{gen_rms_db:.2f}dB({rms_delta:+.2f})"
                 gain_str = f"  gain:{gain_db:+.2f}"
@@ -512,7 +548,11 @@ def run_generation_test(
 
             # Log to metadata file (full precision)
             if compensate:
-                meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  gain:{gain_db:+.4f}  off:{offset} mse:{align_mse:.4f}"
+                if gains_per_ch:
+                    gain_str_meta = '/'.join(f'{g:+.4f}' for g in gains_per_ch)
+                    meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  gain:{gain_str_meta}  off:{offset} mse:{align_mse:.4f}"
+                else:
+                    meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  gain:{gain_db:+.4f}  off:{offset} mse:{align_mse:.4f}"
             else:
                 meta_line = f"{gen:3d}/{generations}  rms:{gen_rms_db:.4f}dB({rms_delta:+.4f})  pk:{gen_peak_db:.4f}  off:{offset} mse:{align_mse:.4f}"
             if is_milestone or is_final:
@@ -588,7 +628,13 @@ Examples:
                         help="Alignment reference: 'original' (gen 0, default) or 'previous' (prior generation)")
     parser.add_argument('--shared', action='store_true',
                         help="Use WASAPI shared mode instead of exclusive (Windows only, for virtual devices)")
-    parser.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+    parser.add_argument('--output-channels', type=str, default=None,
+                        help="Output channel mapping, e.g. '11,12' (default: 1,2)")
+    parser.add_argument('--input-channels', type=str, default=None,
+                        help="Input channel mapping, e.g. '11,12' (default: 1,2)")
+    parser.add_argument('-p', '--per-channel', action='store_true',
+                        help="Apply level compensation per channel (for unlinked hardware gains)")
+    parser.add_argument('-V', '--version', action='version', version=f'%(prog)s {__version__}')
     
     args = parser.parse_args()
     
@@ -599,7 +645,16 @@ Examples:
     if not os.path.exists(args.source):
         print(f"Error: Source file not found: {args.source}")
         return 1
-    
+
+    # Parse channel mappings
+    output_channels = None
+    if args.output_channels:
+        output_channels = [int(c) for c in args.output_channels.split(',')]
+
+    input_channels = None
+    if args.input_channels:
+        input_channels = [int(c) for c in args.input_channels.split(',')]
+
     run_generation_test(
         source_file=args.source,
         output_dir=args.output,
@@ -610,6 +665,9 @@ Examples:
         compensate=args.compensate,
         align_ref=args.align_ref,
         shared_mode=args.shared,
+        output_channels=output_channels,
+        input_channels=input_channels,
+        per_channel=args.per_channel,
     )
     
     return 0
