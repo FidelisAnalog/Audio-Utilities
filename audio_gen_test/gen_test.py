@@ -30,25 +30,29 @@ def _to_mono_f64(audio: np.ndarray) -> np.ndarray:
     return d
 
 
-def fft_xcorr_offset(ref_mono: np.ndarray, test_mono: np.ndarray, max_offset: int = 12000) -> int:
+def fft_xcorr_offset(ref_mono: np.ndarray, test_mono: np.ndarray, sample_rate: int, max_offset: int = 0) -> int:
     """
     FFT cross-correlation for rough sample offset.
 
     Args:
         ref_mono: Reference signal (mono float64)
         test_mono: Test/recorded signal (mono float64)
-        max_offset: Maximum expected offset in samples
+        sample_rate: Sample rate in Hz (used for margin/segment sizing)
+        max_offset: Maximum expected offset in samples (0 = auto from sample_rate)
 
     Returns:
         Rough integer offset (positive = test is delayed relative to ref)
     """
-    margin = 44100
+    if max_offset <= 0:
+        max_offset = sample_rate // 2  # 0.5s default max offset
+
+    margin = sample_rate  # 1 second margin
     usable = min(len(ref_mono), len(test_mono)) - margin * 2 - max_offset
-    if usable < 44100:
+    if usable < sample_rate:
         margin = min(len(ref_mono), len(test_mono)) // 8
         usable = min(len(ref_mono), len(test_mono)) - margin * 2 - max_offset
 
-    seg_len = max(usable, 44100)
+    seg_len = max(usable, sample_rate)
     start = margin
 
     ref_seg = ref_mono[start:start + seg_len].copy()
@@ -73,7 +77,7 @@ def fft_xcorr_offset(ref_mono: np.ndarray, test_mono: np.ndarray, max_offset: in
     return offset
 
 
-def mse_at_offset(a_mono: np.ndarray, b_mono: np.ndarray, offset: int, margin: int = 44100) -> float:
+def mse_at_offset(a_mono: np.ndarray, b_mono: np.ndarray, offset: int, margin: int = 0) -> float:
     """
     Compute MSE between two signals at a given offset.
 
@@ -116,8 +120,10 @@ def find_alignment_offset(reference: np.ndarray, recorded: np.ndarray, sample_ra
     ref_mono = _to_mono_f64(reference)
     rec_mono = _to_mono_f64(recorded)
 
+    margin = sample_rate  # 1 second margin for MSE edge exclusion
+
     # Stage 1: FFT cross-correlation for rough offset
-    rough_offset = fft_xcorr_offset(ref_mono, rec_mono)
+    rough_offset = fft_xcorr_offset(ref_mono, rec_mono, sample_rate)
 
     # Stage 2: MSE refinement around rough offset
     best_offset = rough_offset
@@ -126,7 +132,7 @@ def find_alignment_offset(reference: np.ndarray, recorded: np.ndarray, sample_ra
         candidate = rough_offset + delta
         if candidate < 0:
             continue
-        mse = mse_at_offset(ref_mono, rec_mono, candidate)
+        mse = mse_at_offset(ref_mono, rec_mono, candidate, margin)
         if mse < best_mse:
             best_mse = mse
             best_offset = candidate
