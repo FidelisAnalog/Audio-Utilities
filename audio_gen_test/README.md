@@ -85,11 +85,11 @@ Fields:
 
 ### The Problem
 
-Earlier versions aligned each generation by cross-correlating the recorded audio against the original source (or previous generation). This works when the audio is clean, but as the signal degrades over many DAC/ADC passes, different parts of the waveform suggest different alignments. By generation 30-40, alignment error of 2-3 samples was unavoidable, and a single bad alignment corrupts all subsequent generations.
+Earlier versions aligned each generation by cross-correlating the recorded audio against a reference. When aligning to the original (gen 0), the reference stays clean but the recorded signal degrades — as the signal accumulates distortion over many DAC/ADC passes, different parts of the waveform suggest different alignments. When aligning to the previous generation, both signals degrade together. Either way, by generation 30-40, alignment error of 2-3 samples was unavoidable, and a single bad alignment corrupts all subsequent generations.
 
 ### The Solution
 
-Instead of aligning on degraded music content, v5 prepends a known alignment marker to each playback. The marker is generated mathematically each generation — it never passes through the DAC/ADC chain and never degrades. Alignment is performed by cross-correlating the recorded marker against the original clean template.
+Instead of aligning on music content, v5 prepends a known alignment marker to each playback. The marker is regenerated from its mathematical definition each generation, so the played marker is always clean. It passes through the DAC/ADC chain once per generation during recording, but the correlation is always between this single-pass recording and the original clean template — never between two degraded signals.
 
 ### Marker Structure
 
@@ -105,7 +105,7 @@ Each chirp is a 200ms linear frequency sweep from 800 Hz to 1200 Hz at -6 dBFS, 
 
 1. **Generate marker**: Three identical 800→1200 Hz chirps at known positions within a ~2s marker signal.
 
-2. **Prepend to music**: Each generation plays `[fresh marker] + [current music] + [padding]`. The marker is always clean — generated from the mathematical formula, not carried forward from the previous generation.
+2. **Prepend to music**: Each generation plays `[fresh marker] + [current music] + [padding]`. The marker is regenerated from its mathematical definition each time — it is not carried forward from the previous generation's recording.
 
 3. **Record**: The recording captures `[silence/latency] [marker] [music] [...]`.
 
@@ -119,12 +119,9 @@ Each chirp is a 200ms linear frequency sweep from 800 Hz to 1200 Hz at -6 dBFS, 
 
 ### Why This Works
 
-The key insight is that alignment quality is decoupled from signal degradation. In music-based alignment, the reference degrades along with the signal — you're correlating two noisy signals. With chirp markers:
+The key insight is that alignment quality is decoupled from signal degradation. Music-based alignment correlates audio that degrades more with each generation — whether comparing against the original (clean reference vs. increasingly degraded recording) or the previous generation (both degraded). The correlation peak broadens and becomes ambiguous.
 
-- The played marker is always pristine (generated fresh each generation)
-- The recorded marker has only passed through one DAC/ADC cycle
-- Cross-correlation against the clean template always produces a sharp, unambiguous peak
-- Alignment quality at generation 100 is identical to generation 1
+With chirp markers, the played marker is regenerated clean each generation. The recorded marker has only passed through one DAC/ADC cycle. The correlation is always between a single-pass degraded chirp and the original clean template — the same quality every time regardless of how many generations have run. This was verified over 100 generations with zero chirp spread across all generations.
 
 ### Search Region Constraints
 
