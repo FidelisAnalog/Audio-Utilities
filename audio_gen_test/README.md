@@ -13,7 +13,7 @@ Two versions are included:
 # Install dependencies
 pip install sounddevice numpy scipy soundfile
 
-# Run 100 generations, save every generation (v5 / chirp alignment)
+# Run 100 generations, save every generation (v6 / chirp alignment)
 python gen_test_v6.py music.wav -g 100 -m 1 -o results/
 
 # With dynamic level compensation (per-channel)
@@ -61,7 +61,7 @@ Each run creates a timestamped folder containing:
 - `gen_100.wav` — Final generation
 - `metadata.txt` — Run parameters and per-generation measurements
 
-### Console Output (v5)
+### Console Output (v6)
 
 ```
   1/100  rms:-16.57dB  pk:0.00  gain:-0.41/-0.40  off:109433-0.201 sprd:0.00 mse:73477.4  gen_001.wav
@@ -76,7 +76,7 @@ Fields:
 - `sprd` — Chirp spread: max disagreement between the three chirp offset estimates (0.00 = perfect agreement)
 - `mse` — Mean squared error vs. original source (degradation tracking, not alignment quality)
 
-## Chirp Marker Alignment (v5)
+## Chirp Marker Alignment (v6)
 
 ### The Problem
 
@@ -84,7 +84,7 @@ Earlier versions aligned each generation by cross-correlating the recorded audio
 
 ### The Solution
 
-Instead of aligning on music content, v5 prepends a known alignment marker to each playback. The marker is regenerated from its mathematical definition each generation, so the played marker is always clean. It passes through the DAC/ADC chain once per generation during recording, but the correlation is always between this single-pass recording and the original clean template — never between two degraded signals.
+Instead of aligning on music content, v6 prepends a known alignment marker to each playback. The marker is regenerated from its mathematical definition each generation, so the played marker is always clean. It passes through the DAC/ADC chain once per generation during recording, but the correlation is always between this single-pass recording and the original clean template — never between two degraded signals.
 
 ### Marker Structure
 
