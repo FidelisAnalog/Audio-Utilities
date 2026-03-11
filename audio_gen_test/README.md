@@ -4,8 +4,8 @@ Measures cumulative audio degradation through repeated DAC/ADC conversion cycles
 
 Two versions are included:
 
-- **`gen_test.py`** (v0.2.0) — Music-based alignment using FFT cross-correlation + MSE refinement. Works well for short runs but alignment degrades over many generations as the audio itself degrades.
-- **`gen_test_v5.py`** (v0.6.0) — Chirp marker alignment. Prepends known alignment tones to each playback. Alignment quality is constant regardless of generation count. Recommended for 100+ generation runs.
+- **`gen_test.py`** (v0.1.2) — Music-based alignment using scipy cross-correlation with sub-sample tracking. Works well for short runs but alignment degrades over many generations as the audio itself degrades.
+- **`gen_test_v6.py`** (v0.6.0) — Chirp marker alignment. Prepends known alignment tones to each playback. Alignment quality is constant regardless of generation count. Recommended for 100+ generation runs.
 
 ## Quick Start
 
@@ -14,10 +14,10 @@ Two versions are included:
 pip install sounddevice numpy scipy soundfile
 
 # Run 100 generations, save every generation (v5 / chirp alignment)
-python gen_test_v5.py music.wav -g 100 -m 1 -o results/
+python gen_test_v6.py music.wav -g 100 -m 1 -o results/
 
 # With dynamic level compensation (per-channel)
-python gen_test_v5.py music.wav -g 100 -m 1 -c dynamic -p -o results/
+python gen_test_v6.py music.wav -g 100 -m 1 -c dynamic -p -o results/
 
 # Original music-based alignment (v1)
 python gen_test.py music.wav -g 100 -m 10 -o results/
@@ -25,10 +25,10 @@ python gen_test.py music.wav -g 100 -m 10 -o results/
 
 ## Usage
 
-### gen_test_v5.py (chirp marker alignment)
+### gen_test_v6.py (chirp marker alignment)
 
 ```
-python gen_test_v5.py <source.wav> [options]
+python gen_test_v6.py <source.wav> [options]
 
 Arguments:
   source              Source WAV file (16/24/32-bit PCM)
@@ -50,12 +50,7 @@ Options:
 
 ### gen_test.py (music-based alignment)
 
-Same options as above, plus:
-
-```
-  -a, --align-ref     Alignment reference: 'original' (default) or 'previous'
-  -w, --align-window  Alignment search ±samples after gen 1 (default: 64, 0 = full)
-```
+Same options as above.
 
 ## Output
 
@@ -96,14 +91,14 @@ Instead of aligning on music content, v5 prepends a known alignment marker to ea
 ```
 [200ms silence] [chirp] [200ms gap] [chirp] [200ms gap] [chirp] [1s silence] [music...]
 
-Total marker: ~2.0 seconds
+Total marker: ~2.2 seconds
 ```
 
 Each chirp is a 200ms linear frequency sweep from 800 Hz to 1200 Hz at -6 dBFS, with 5ms fade-in/out to avoid clicks. Three identical chirps provide three independent alignment estimates. The 1-second tail silence ensures a clean separation between the marker and the music content.
 
 ### How Alignment Works
 
-1. **Generate marker**: Three identical 800→1200 Hz chirps at known positions within a ~2s marker signal.
+1. **Generate marker**: Three identical 800→1200 Hz chirps at known positions within a ~2.2s marker signal.
 
 2. **Prepend to music**: Each generation plays `[fresh marker] + [current music] + [padding]`. The marker is regenerated from its mathematical definition each time — it is not carried forward from the previous generation's recording.
 
@@ -137,12 +132,11 @@ The chirp frequency range (800-1200 Hz) overlaps with common musical content, pa
 
 The original alignment approach, retained in `gen_test.py`:
 
-1. **FFT cross-correlation** finds the rough sample offset between played and recorded audio
-2. **MSE refinement** over ±search_radius samples around the rough offset selects the best integer alignment
-3. **Sub-sample drift** is tracked using parabolic interpolation on the MSE minimum
-4. After generation 1 establishes the offset, subsequent generations search a narrow window (default ±64 samples) to prevent false peaks
+1. **Full cross-correlation** (`scipy.signal.correlate`) between the previous generation's audio and the new recording finds the sample offset
+2. **Parabolic interpolation** on the correlation peak provides sub-sample refinement
+3. **Cumulative sub-sample tracking** accumulates fractional offsets across generations; when the total exceeds ±0.5, the integer offset is adjusted by one sample
 
-This works well for runs under ~20 generations. Beyond that, cumulative degradation makes alignment progressively less reliable.
+Each generation aligns to the previous generation (not the original). This works well for short runs but alignment degrades over many generations as both signals accumulate distortion.
 
 ## Level Compensation
 
