@@ -67,7 +67,6 @@ Results:
 
 The test null (WAV-FLAC) and control null (WAV-WAV) should be statistically indistinguishable -- both sitting at the analog noise floor of your hardware. If FLAC playback introduced anything (noise from CPU load, decoding artifacts, etc.), the test null would be measurably shallower than the control. It won't be.
 
-With a high-quality interface (e.g., RME ADI-2 Pro), expect null depths around -115 to -120 dB.
 
 ## How It Works
 

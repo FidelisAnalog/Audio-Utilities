@@ -68,3 +68,7 @@ fp-info-cache
 
 # VS Code
 *.code-workspace
+
+# Claude Code
+.claude/
+CLAUDE.md
